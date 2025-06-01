@@ -4,8 +4,8 @@
 #include "time.h"
 
 // WiFi credentials
-const char* ssid = "Fibernet-60713347";
-const char* password = "f5567r6k";
+const char* ssid = "Yunes";
+const char* password = "123456789";
 
 // API details
 const char* apiKey = "9b00b65e-e873-45af-8ff8-47366a137f53";

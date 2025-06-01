@@ -8,8 +8,8 @@
 #include <time.h>
 
 // WiFi credentials (replace with your own)
-const char* ssid = "Labitat (free)";
-const char* password = "labitatisawesome";
+const char* ssid = "Yunes";
+const char* password = "123456789";
 
 // API details
 const char* apiKey = "9b00b65e-e873-45af-8ff8-47366a137f53";
