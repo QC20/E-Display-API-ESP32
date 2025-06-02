@@ -21,7 +21,7 @@ String Base_url = "https://www.rejseplanen.dk/api/";
 String Api_key = "";
 String Time_set = "";
 String Date_set = "";
-String Id_stop = "1550";
+const char* Id_stop = "1550|1583";
 String Max_arriavels = "3";
 String Request_url = "";
 
@@ -29,10 +29,10 @@ int list_limit = 3;
 
 //Get current date
 String Date_url = "https://timeapi.io/api/time/current/zone?timeZone=Europe%2FCopenhagen";
-//String Request_url = Base_url+"multiArrivalBoard?idList=46676&date=2025-05-23&time=23:45&accessId="+Api_key;
 
-String payload;
+String payload = "";
 List<String> data_hold;
+List<String> data_hold2;
 JsonDocument doc;
 
 void setup() 
@@ -58,10 +58,8 @@ void setup()
 //Filter the data from rejsepan api and added to list
 void Filter_data_rejseplan(String data)
 {
-	Serial.println(data);
-	data_hold.clear();
+//	data_hold.clear();
 	list_limit = 0;
-	Serial.println("There is data");
 	while(data.indexOf("<Arrival ")>0)
 	{
 		String String_build_time = "";
@@ -89,11 +87,19 @@ void Filter_data_rejseplan(String data)
 			pointid = data.substring(indexStart, indexStop).indexOf(" time=");
 			String_build_time += data.substring(indexStart+pointid+7, indexStart+pointid+15);
 		}
-		data_hold.add(String_build_time);
+		if(data.substring(indexStart, indexStop).indexOf("stopExtId=\"1550\"") > 0 && data_hold.getSize() < 3)
+		{
+			data_hold.add(String_build_time);
+		}
+		if(data.substring(indexStart, indexStop).indexOf("stopExtId=\"1583\"") > 0 && data_hold.getSize() < 3)
+		{
+			data_hold2.add(String_build_time);
+		}
+		Serial.println(String_build_time);
 		data = data.substring(indexStop, data.length());
-		list_limit++;
+/*		list_limit++;
 		if(list_limit == 3)
-			break;
+			break;*/
 	}
 }
 
@@ -101,7 +107,9 @@ void Filter_data_rejseplan(String data)
 void build_rejseplan_string()
 {
 //	Request_url = Base_url+"multiArrivalBoard?idList="+Id_stop+"&date="+Date_set+"&time="+Time_set+"&maxJourneys="+Max_arriavels+"&accessId="+Api_key;
-	Request_url = Base_url+"multiArrivalBoard?idList="+Id_stop+"&date="+Date_set+"&time="+Time_set+"&accessId="+Api_key;
+	Request_url = Base_url+"multiArrivalBoard?idList="+String(Id_stop)+"&date="+Date_set+"&time="+Time_set+"&accessId="+Api_key+ "&format=json";
+//	Request_url = Base_url+"multiArrivalBoard?idList="+Id_stop+"&date="+Date_set+"&time="+Time_set+"&accessId="+Api_key;
+//	Request_url = Base_url+"multiArrivalBoard?idList=1550&date="+Date_set+"&time="+Time_set+"&accessId="+Api_key;
 }
 
 void format_time_url(String Date_Raw, int NTP_time)
@@ -115,11 +123,11 @@ void format_time_url(String Date_Raw, int NTP_time)
 	//handles sommer/winter time.
 	if(timezone != NTP_time)
 	{
-		if(timezone == 0 and NTP_time == 23)
+		if(timezone == 0 && NTP_time == 23)
 		{
 			offset+=3600;
 		}
-		else if(timezone == 23 and NTP_time == 0)
+		else if(timezone == 23 && NTP_time == 0)
 		{
 			offset-=3600;
 		}
@@ -145,15 +153,24 @@ void Url_get(String url)
 		HTTPClient http;
 		String serverPath = url;
 		// Your Domain name with URL path or IP address with path
-		http.begin(serverPath.c_str());
+		http.begin(serverPath);
 		// Send HTTP GET request
 		int httpResponseCode = http.GET();
 		
 		if (httpResponseCode>0) 
 		{
+			Serial.println(url);
 			Serial.print("HTTP Response code: ");
 			Serial.println(httpResponseCode);
 			payload = http.getString();
+			if(payload.length() > 2)
+			{
+				Serial.println("there is data");
+			}
+			else
+			{
+				Serial.println("there is no data");
+			}
 		}
 		else 
 		{
@@ -200,14 +217,14 @@ void loop()
 		}
 		Time_set = timeClient.getFormattedTime().substring(0,5);
 		build_rejseplan_string();
-		Serial.println(Request_url);
+		delay(10);
 		Url_get(Request_url);
 		Filter_data_rejseplan(payload);
 		for(int i = 0; i < data_hold.getSize(); i++)
 		{
 			Serial.println(data_hold[i]);
 		}
-		data_hold.clear();
+//		data_hold.clear();
 	}
 	delay(10000);
 }
