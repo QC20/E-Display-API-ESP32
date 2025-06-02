@@ -1,6 +1,28 @@
 // Define a higher nesting limit to handle deep JSON structures
 #define ARDUINOJSON_DEFAULT_NESTING_LIMIT 16
 
+// ------------------------------------------------------------------------------------
+// WIRING INSTRUCTIONS: Arduino Nano ESP32 to WeAct 4.2" Epaper
+// ------------------------------------------------------------------------------------
+// ePaper VCC  -> Nano ESP32 3V3 OUT
+// ePaper GND  -> Nano ESP32 GND
+//
+// SPI Communication:
+// ePaper DIN  -> Nano ESP32 D11 (GPIO11) (SPI MOSI)
+// ePaper CLK  -> Nano ESP32 D13 (GPIO12) (SPI SCK)
+//
+// Control Pins (Ensure these GPIO numbers match your wiring):
+// ePaper CS   -> Connect to the pin corresponding to GPIO5 on your Nano ESP32 (e.g., D2)
+// ePaper DC   -> Connect to the pin corresponding to GPIO0 on your Nano ESP32 (Note: GPIO0 can be tricky, often related to boot mode)
+// ePaper RST  -> Connect to the pin corresponding to GPIO2 on your Nano ESP32
+// ePaper BUSY -> Connect to the pin corresponding to GPIO15 on your Nano ESP32
+//
+// Important: The GxEPD2 constructor below uses raw GPIO numbers.
+// Please verify that you have wired CS to GPIO5, DC to GPIO0, RST to GPIO2, and BUSY to GPIO15.
+// The Nano ESP32 pin D2 is GPIO5. GPIO0, GPIO2, GPIO15 are available but not always on standard D-pin headers.
+// Double-check your specific Nano ESP32 variant's pinout for GPIO0, GPIO2, and GPIO15 if you are unsure.
+// ------------------------------------------------------------------------------------
+
 // Include necessary libraries
 #include <WiFi.h>
 #include <HTTPClient.h>
@@ -12,27 +34,15 @@
 #include <Fonts/FreeMonoBold9pt7b.h>
 #include <Fonts/FreeMonoBold12pt7b.h>
 
-// ------------------------------------------------------------------------------------
-// WIRING INSTRUCTIONS: Arduino Nano ESP32 to WeAct 4.2" Epaper
-// ------------------------------------------------------------------------------------
-// ePaper VCC  -> Nano ESP32 3V3 OUT
-// ePaper GND  -> Nano ESP32 GND
-// ePaper DIN  -> Nano ESP32 D11 (GPIO11) (SPI MOSI)
-// ePaper CLK  -> Nano ESP32 D13 (GPIO12) (SPI SCK)
-// ePaper CS   -> Nano ESP32 D10 (GPIO18) (SPI Chip Select)
-// ePaper DC   -> Nano ESP32 D9  (GPIO17) (Data/Command)
-// ePaper RST  -> Nano ESP32 A0  (GPIO1)  (Reset)
-// ePaper BUSY -> Nano ESP32 D7  (GPIO10) (Busy Status)
-// ------------------------------------------------------------------------------------
-
-// Initialize the display for the 4.2" ePaper module
+// Initialize the display for the 4.2" ePaper module using GPIO numbers
+// These are the pin numbers from your working code.
 GxEPD2_BW<GxEPD2_420_GDEY042T81, GxEPD2_420_GDEY042T81::HEIGHT> display(GxEPD2_420_GDEY042T81(
-  /*CS=5*/   5,    // Chip Select pin
-  /*DC=*/    0,    // Data/Command pin
-  /*RST=*/   2,    // Reset pin
-  /*BUSY=*/  15    // Busy pin
-  // SCL (Serial Clock) is connected to GPIO 18
-  // SDA (Serial Data / MOSI) is connected to GPIO 23
+  /*CS=*/   5,    // Chip Select pin (GPIO5)
+  /*DC=*/   0,    // Data/Command pin (GPIO0)
+  /*RST=*/  2,    // Reset pin (GPIO2)
+  /*BUSY=*/ 15    // Busy pin (GPIO15)
+  // Hardware SPI pins (SCK, MOSI/SDA) are typically used by default by the library.
+  // For Arduino Nano ESP32: SCK is GPIO12 (D13), MOSI is GPIO11 (D11).
 ));
 // ------------------------------------------------------------------------------------
 
@@ -56,14 +66,13 @@ void setup() {
   Serial.begin(115200);
   delay(100); // Wait for serial to initialize
 
-  Serial.println("Starting E-Paper Bus Schedule Display (Single File Version)...");
+  Serial.println("Starting E-Paper Bus Schedule Display (Rotated View)...");
 
   // Initialize the display
   // Parameters: serial_diag_bitrate, initial_cp, wake_up_delay, spi_try_optimized
   display.init(115200, true, 10, false);
-  display.setRotation(3); // Set rotation for landscape view (300px width, 400px height)
-                          // '3' is 90 deg counter-clockwise.
-                          // Adjust if orientation is not as expected (0, 1, 2, 3 are standard).
+  display.setRotation(0); // Set rotation to 0 for native landscape (400px width, 300px height)
+                          // Previous was 3.
 
   // Initial display message
   display.setFont(&FreeMonoBold12pt7b);
@@ -197,33 +206,19 @@ void loop() {
         // Only process arrivals for "Bus 1A"
         if (line != "Bus 1A") continue;
 
-        // Rejseplanen dates are dd.mm.yy, times are HH:MM
-        String arrivalDateStr = arrival["rtDate"] | arrival["date"]; // e.g., "02.06.25"
-        String arrivalTimeStr = arrival["rtTime"] | arrival["time"]; // e.g., "14:30"
+        String arrivalDateStr = arrival["rtDate"] | arrival["date"]; 
+        String arrivalTimeStr = arrival["rtTime"] | arrival["time"]; 
 
-        // Convert arrival time to minutes since midnight for today
         int arrivalHour = arrivalTimeStr.substring(0, 2).toInt();
         int arrivalMinute = arrivalTimeStr.substring(3, 5).toInt();
         int arrivalMinutes_calc = arrivalHour * 60 + arrivalMinute;
 
         int arrivalTotalMinutes = arrivalMinutes_calc;
-
-        // Crude check if arrival is for "next day" based on date string comparison.
-        // Rejseplanen API provides date as DD.MM.YY
-        // Current date from strftime is YYYY-MM-DD. For robust comparison, parse properly.
-        // For this example, if API date string (dd.mm.yy) is different from today's (derived from system time),
-        // it's complex. Let's assume API provides current day's data or future.
-        // If arrivalTimeStr is e.g. 00:15 and currentTime is 23:50, it's likely "next day".
         
-        // A simple way to handle "next day" if time is past midnight but within a few hours:
-        if (arrivalHour < currentHour && currentHour > 20 && arrivalHour < 5) { // e.g. current 23:00, arrival 00:15
-             arrivalTotalMinutes += 1440; // Add a day's worth of minutes
+        if (arrivalHour < currentHour && currentHour > 20 && arrivalHour < 5) { 
+             arrivalTotalMinutes += 1440; 
         }
-        // A more robust method would parse the arrivalDateStr and compare it to currentDate.
-        // The provided `currentDate` is YYYY-MM-DD. `arrivalDateStr` is DD.MM.YY.
-        // This part can be improved for more accurate multi-day handling.
 
-        // Find the earliest arrival after current time
         if (arrivalTotalMinutes >= currentMinutes) {
           if (stopExtId == "1550" && arrivalTotalMinutes < nextTime1550_calc) {
             nextTime1550_calc = arrivalTotalMinutes;
@@ -275,7 +270,8 @@ void loop() {
     // Stop 1583 (Alhambravej)
     display.setCursor(left_margin, current_y);
     String shortStopName1583 = stopName1583;
-    if (shortStopName1583.length() > 38) shortStopName1583 = shortStopName1583.substring(0, 35) + "..."; // Approx chars for 300px width
+    // Adjusted length for 400px width (approx 55-57 chars for 9pt font)
+    if (shortStopName1583.length() > 55) shortStopName1583 = shortStopName1583.substring(0, 52) + "..."; 
     display.print("Stop: " + shortStopName1583);
     current_y += line_height_9;
 
@@ -293,7 +289,8 @@ void loop() {
     // Stop 1550 (H.C. Ørsteds Vej)
     display.setCursor(left_margin, current_y);
     String shortStopName1550 = stopName1550;
-    if (shortStopName1550.length() > 38) shortStopName1550 = shortStopName1550.substring(0, 35) + "...";
+    // Adjusted length for 400px width
+    if (shortStopName1550.length() > 55) shortStopName1550 = shortStopName1550.substring(0, 52) + "...";
     display.print("Stop: " + shortStopName1550);
     current_y += line_height_9;
 
@@ -307,12 +304,11 @@ void loop() {
     }
 
     // Display last update time
-    // Ensure it fits, otherwise put it at the very bottom.
-    // Max height after rotation (3) is display.height() which should be 400 for 400x300 screen.
+    // display.height() will be 300 with rotation(0)
     if (current_y > display.height() - (line_height_9 * 2) ) { 
         current_y = display.height() - line_height_9 - 5; 
     } else {
-        current_y += line_height_9; // Some space before last update time
+        current_y += line_height_9; 
     }
     display.setCursor(left_margin, current_y);
     char updateTimeStr[20];
@@ -322,7 +318,5 @@ void loop() {
   } while (display.nextPage());
 
   Serial.println("Display updated. Waiting for next cycle.");
-  // Update interval. For ePaper, frequent updates can reduce lifespan.
-  // 60000ms = 1 minute. For testing, this is fine. For deployment, consider 5-15 minutes.
   delay(60000);
 }
