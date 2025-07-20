@@ -4,10 +4,9 @@
 #include <NTPClient.h>
 #include <WiFiUdp.h>
 #include <ArduinoJson.h>
-#include <yxml.h>
 
-//const char *ssid = "";
-//const char *password = "";
+//const char *ssid = "TP-Link_6639";
+//const char *password = "17584722";
 
 //UTC offset for denmark.
 int offset = 3600;
@@ -15,19 +14,19 @@ int offset = 3600;
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "dk.pool.ntp.org", offset, 60000);
 
-const char *ssid = "Labitat (free)";
-const char *password = "labitatisawesome";
+//const char *ssid = "Labitat (free)";
+//const char *password = "labitatisawesome";
+const char *ssid = "bornhack";
+const char *password = "";
 
 String Base_url = "https://www.rejseplanen.dk/api/";
-String Api_key = "";
+String Api_key = "8c957bde-a5bf-41a2-8e6c-535eb4782fa6";
 String Time_set = "";
 String Date_set = "";
 String Max_arriavels = "2";
 String Request_url = "";
 String Request_url_1583 = "";
 String Request_url_1550 = "";
-
-int list_limit = 3;
 
 //Get current date
 String Date_url = "https://timeapi.io/api/time/current/zone?timeZone=Europe%2FCopenhagen";
@@ -36,11 +35,22 @@ String payload = "";
 List<String> data_hold;
 List<String> data_hold2;
 JsonDocument doc;
+JsonDocument payloadjs;
+
+JsonDocument filtertime;
+JsonDocument filterrtTime;
 
 HTTPClient http;
 
+int error_data = 0;
+int error_server = 0;
+
 void setup() 
 {
+	filtertime["Arrival"][0]["time"] = true;
+	filtertime["Arrival"][0]["rtTime"] = true;
+	filtertime["Arrival"][0]["stopExtId"] = true;
+
 	Serial.begin(115200);
 	delay(1000);
 
@@ -64,53 +74,43 @@ void Filter_data_rejseplan()
 {
 	String tempdata;
 	tempdata = payload;
-	for(int i = 0; i< Max_arriavels.toInt(); i++)
+//	Serial.println(payload);
+	deserializeJson(payloadjs, payload, DeserializationOption::Filter(filtertime));
+	JsonArray data = payloadjs["Arrival"];
+	for (JsonVariant item : data) 
 	{
-		int indexStart = tempdata.indexOf("<Arrival ");
-		int indexStop = 0;
-		String String_build_time = "";
-		int pointid = 0;
-		for(int i = indexStart; i < tempdata.length(); i++)
+		String busid = item["stopExtId"];
+		String bustimes = "";
+		if(busid == "1550")
 		{
-			if(tempdata[i] == '>')
+			if(data_hold.getSize() == Max_arriavels.toInt())
 			{
-				indexStop = i+1;
-				break;
+				data_hold.clear();
 			}
+			bustimes = String(item["time"]) + " : " + String(item["rtTime"]);
+//			Serial.println(bustimes);
+			data_hold.add(bustimes);
 		}
-		if(tempdata.substring(indexStart, indexStop).indexOf("PROGNOSED") > 0)
+		else if(busid == "1583")
 		{
-			pointid = tempdata.substring(indexStart, indexStop).indexOf(" time=");
-			String_build_time += tempdata.substring(indexStart+pointid+7, indexStart+pointid+15);
-			String_build_time += " , ";
-			pointid = tempdata.substring(indexStart, indexStop).indexOf("rtTime=");
-			String_build_time += tempdata.substring(indexStart+pointid+8, indexStart+pointid+16);
+			if(data_hold2.getSize() == Max_arriavels.toInt())
+			{
+				data_hold2.clear();
+			}
+			bustimes = String(item["time"]) + " : " + String(item["rtTime"]);
+//			Serial.println(bustimes);
+			data_hold2.add(bustimes);
 		}
-		else
-		{
-			pointid = tempdata.substring(indexStart, indexStop).indexOf(" time=");
-			String_build_time += tempdata.substring(indexStart+pointid+7, indexStart+pointid+15);
-		}
-		if(tempdata.substring(indexStart, indexStop).indexOf("stopExtId=\"1550\"") > 0 && data_hold.getSize() < Max_arriavels.toInt())
-		{
-			data_hold.add(String_build_time);
-		}
-		else if(tempdata.substring(indexStart, indexStop).indexOf("stopExtId=\"1583\"") > 0 && data_hold2.getSize() < Max_arriavels.toInt())
-		{
-			data_hold2.add(String_build_time);
-		}
-		Serial.println("--------");
-		Serial.println(tempdata.substring(indexStart, indexStop));
-		tempdata = payload.substring(indexStop);
-		Serial.println("--------");
 	}
+//	serializeJson(payloadjs, Serial);
+//	Serial.println();
 }
 
 //for every update to time and date string needs to be rebuild
 void build_rejseplan_string()
 {
-	Request_url_1583 = Base_url+"multiArrivalBoard?idList=1583&date="+Date_set+"&time="+Time_set+"&maxJourneys="+Max_arriavels+"&accessId="+Api_key;
-	Request_url_1550 = Base_url+"multiArrivalBoard?idList=1550&date="+Date_set+"&time="+Time_set+"&maxJourneys="+Max_arriavels+"&accessId="+Api_key;
+	Request_url_1583 = Base_url+"multiArrivalBoard?idList=1583&date="+Date_set+"&time="+Time_set+"&maxJourneys="+Max_arriavels+"&accessId="+Api_key+"&format=json";
+	Request_url_1550 = Base_url+"multiArrivalBoard?idList=1550&date="+Date_set+"&time="+Time_set+"&maxJourneys="+Max_arriavels+"&accessId="+Api_key+"&format=json";
 }
 
 void format_time_url(String Date_Raw, int NTP_time)
@@ -160,23 +160,21 @@ void Url_get(String url)
 		
 		if (httpResponseCode>0) 
 		{
-			Serial.println(url);
-			Serial.print("HTTP Response code: ");
-			Serial.println(httpResponseCode);
+//			Serial.println(url);
+//			Serial.print("HTTP Response code: ");
+//			Serial.println(httpResponseCode);
 			payload = http.getString();
-			if(payload.length() != 0)
-			{
-				Serial.println("there is data");
-			}
-			else
+			if(payload.length() == 0)
 			{
 				Serial.println("there is no data");
+				error_data++;
 			}
 		}
 		else 
 		{
-			Serial.print("Error code: ");
-			Serial.println(httpResponseCode);
+			Serial.println("Error code: "+String(httpResponseCode));
+			Serial.println(payload);
+			error_server++;
 		}
 		http.end();
 	}
@@ -198,18 +196,16 @@ void run_during_boot_and_day_switch()
 	doc.clear();
 }
 
-bool stop1 = true;
-bool stop2 = false;
+bool Change_stop_place = true;
 
 void loop()
 {
 	timeClient.update();
-	Serial.println(timeClient.getFormattedTime());
+//	Serial.println(timeClient.getFormattedTime());
 	if(Date_set == "")
 	{
 		run_during_boot_and_day_switch();
 	}
-
 	//will run ones every min.
 	if(Time_set != timeClient.getFormattedTime().substring(0,5))
 	{
@@ -222,35 +218,35 @@ void loop()
 			run_during_boot_and_day_switch();
 		}
 		Time_set = timeClient.getFormattedTime().substring(0,5);
-		if(stop1)
+		if(Change_stop_place)
 		{
-			Serial.println("stop1");
 			build_rejseplan_string();
 			Url_get(Request_url_1550);
 			Filter_data_rejseplan();
-			stop1 = false;
-			stop2 = true;
+			Change_stop_place = false;
 		}
-		else if(stop2)
+		else
 		{
-			Serial.println("stop2");
 			build_rejseplan_string();
 			Url_get(Request_url_1583);
 			Filter_data_rejseplan();
-			stop1 = true;
-			stop2 = false;
+			Change_stop_place = true;
 		}
-		Serial.println("data1");
+		Serial.println();
+		Serial.println(timeClient.getFormattedTime());
+		//Stop place 1
 		for(int i = 0; i < data_hold.getSize(); i++)
 		{
 			Serial.println(data_hold[i]);
 		}
-		Serial.println("data2");
+		//Stop place 2
 		for(int i = 0; i < data_hold2.getSize(); i++)
 		{
 			Serial.println(data_hold2[i]);
 		}
 	}
+	Serial.println("error data count: " + String(error_data));
+	Serial.println("error server count: " + String(error_server));
 	delay(10000);
 }
 
