@@ -1,4 +1,4 @@
-# Rejseplanen E-Paper Display
+# Rejseplanen API Bus Depature E-Paper Display
 
 **NOTE**: I have started a new project wherein I will do more in depth tests with the WeAct display. Star ([Still-in-Motion](https://github.com/QC20/still-in-motion)) to stay updated.
 
