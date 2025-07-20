@@ -20,7 +20,7 @@ const char *ssid = "bornhack";
 const char *password = "";
 
 String Base_url = "https://www.rejseplanen.dk/api/";
-String Api_key = "8c957bde-a5bf-41a2-8e6c-535eb4782fa6";
+String Api_key = "";
 String Time_set = "";
 String Date_set = "";
 String Max_arriavels = "2";
